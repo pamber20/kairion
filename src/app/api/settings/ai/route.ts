@@ -1,0 +1,57 @@
+import { apiError, parseBody, withAuth } from "@/lib/api";
+import { canConfigure } from "@/lib/auth/roles";
+import {
+  AiCredentialError,
+  deleteAiCredential,
+  saveAiCredential,
+} from "@/server/ai/credentials";
+import {
+  aiSettingsPutSchema,
+  baseUrlEfectiva,
+  vistaAjustesIa,
+} from "@/server/ai/settings";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Ajustes → IA: el proveedor, el modelo y la llave de ESTA organización
+ * (issue #85). La llave nunca sale de aquí: la respuesta lleva sus últimos 4,
+ * el estado y, si el entorno trae `OPENROUTER_*`, el respaldo que aplica
+ * mientras no haya nada guardado.
+ */
+
+export const GET = withAuth(async (session) => {
+  return Response.json(await vistaAjustesIa(session.organizationId));
+});
+
+export const PUT = withAuth(async (session, req: Request) => {
+  if (!canConfigure(session.role)) {
+    return apiError(403, "forbidden", "Solo el propietario o administrador puede configurar la IA");
+  }
+  const body = await parseBody(req, aiSettingsPutSchema);
+  if (!body.ok) return body.response;
+
+  try {
+    await saveAiCredential({
+      organizationId: session.organizationId,
+      provider: body.data.provider,
+      baseUrl: baseUrlEfectiva(body.data.provider, body.data.baseUrl),
+      model: body.data.model,
+      token: body.data.token,
+    });
+  } catch (err) {
+    if (err instanceof AiCredentialError) {
+      return apiError(422, err.code, err.message);
+    }
+    throw err;
+  }
+  return Response.json(await vistaAjustesIa(session.organizationId));
+});
+
+export const DELETE = withAuth(async (session) => {
+  if (!canConfigure(session.role)) {
+    return apiError(403, "forbidden", "Solo el propietario o administrador puede eliminar la configuración de IA");
+  }
+  await deleteAiCredential(session.organizationId);
+  return Response.json(await vistaAjustesIa(session.organizationId));
+});

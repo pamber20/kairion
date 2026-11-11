@@ -1,0 +1,42 @@
+# --- Secretos (NUNCA al control de versiones) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- MCP local con tokens (si lo personalizas con secretos en claro) ---
+# .mcp.json se commitea SOLO si usa ${VAR} (sin tokens en claro). Si metes
+# secretos directos, ignóralo y deja únicamente .mcp.json.example.
+# .mcp.json
+
+# --- Dependencias / build ---
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# --- Logs y temporales ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.cache/
+tmp/
+.tmp/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Estado local y pruebas ---
+.claude/settings.local.json
+.playwright-mcp/
+.tmp-seed-demo.mjs
+.tmp-*.mjs
+.dev-media/
+scratch/
