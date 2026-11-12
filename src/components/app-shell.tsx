@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
-import type { Branding } from "@/lib/branding";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, ShieldAlert } from "lucide-react";
+import { accentCssVariables, type Branding } from "@/lib/branding";
 import type { ThemePreference } from "@/lib/theme";
 import type { ResolvedCommit } from "@/lib/version";
+import type { AccessibleOrganization } from "@/server/tenants";
 import { AppNav } from "@/components/app-nav";
 import { BrandLogo } from "@/components/brand-mark";
 
@@ -25,9 +26,15 @@ export function AppShell({
   branding,
   userName,
   role,
+  superAdmin = false,
+  impersonating = false,
+  activeOrganizationId,
+  activeOrganizationName,
+  accessibleOrganizations = [],
   theme,
   commit,
   agenda = false,
+  clinical = false,
   kicker,
   aviso = null,
   children,
@@ -35,25 +42,28 @@ export function AppShell({
   branding: Branding;
   userName: string;
   role: string;
+  superAdmin?: boolean;
+  impersonating?: boolean;
+  activeOrganizationId?: string;
+  activeOrganizationName?: string;
+  accessibleOrganizations?: AccessibleOrganization[];
   theme: ThemePreference;
   /** Commit resuelto en el servidor, con su procedencia (ver `resolveCommit`). */
   commit?: ResolvedCommit;
   /** 015 — ¿esta instancia tiene agenda? Lo decide el servidor. */
   agenda?: boolean;
+  /** Módulo clínico MDental Láser */
+  clinical?: boolean;
   /** 028 — La etiqueta bajo el logo (`navKicker`). */
   kicker?: string;
   /**
    * Franja de aviso por encima de TODA la aplicación (#85).
-   *
-   * Va aquí y no dentro de una pantalla porque lo que anuncia no es de una
-   * pantalla: es que el agente no puede contestar. Quien tiene ese problema
-   * no está mirando Ajustes, está mirando su bandeja y preguntándose por qué
-   * no responde nadie.
    */
   aviso?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
 
   // Navegar = cerrar el cajón. Sin esto, tocar "Pipeline" deja el velo encima
@@ -71,8 +81,40 @@ export function AppShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
 
+  const primaryOrg = accessibleOrganizations.find((o) => o.slug === "principal");
+
+  // Sincroniza dinámicamente las variables de color de la organización activa en el documento
+  useEffect(() => {
+    if (!branding?.accent) return;
+    const css = accentCssVariables(branding.accent);
+    let tag = document.getElementById("active-agency-theme") as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement("style");
+      tag.id = "active-agency-theme";
+      document.head.appendChild(tag);
+    }
+    tag.innerHTML = css;
+  }, [branding?.accent]);
+
+  async function returnToPrimaryOrg() {
+    if (!primaryOrg) return;
+    const res = await fetch("/api/tenants/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organizationId: primaryOrg.id }),
+    });
+    if (res.ok) {
+      router.push("/tenants");
+      router.refresh();
+    }
+  }
+
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      <style
+        id="app-shell-theme"
+        dangerouslySetInnerHTML={{ __html: accentCssVariables(branding.accent) }}
+      />
       {navOpen && (
         <button
           aria-label="Cerrar el menú"
@@ -87,8 +129,13 @@ export function AppShell({
         commit={commit}
         userName={userName}
         role={role}
+        superAdmin={superAdmin}
+        impersonating={impersonating}
+        activeOrganizationId={activeOrganizationId}
+        accessibleOrganizations={accessibleOrganizations}
         theme={theme}
         agenda={agenda}
+        clinical={clinical}
         kicker={kicker}
         open={navOpen}
         onClose={() => setNavOpen(false)}
@@ -108,6 +155,25 @@ export function AppShell({
           </button>
           <BrandLogo branding={branding} className="min-w-0" />
         </header>
+
+        {impersonating && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-warning-soft px-4 py-1.5 text-xs text-warning-text">
+            <span className="flex items-center gap-1.5 font-medium">
+              <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+              Modo Soporte SuperAdmin: estás operando dentro de la organización{" "}
+              <strong>{activeOrganizationName ?? branding.name}</strong>
+            </span>
+            {primaryOrg && (
+              <button
+                type="button"
+                onClick={returnToPrimaryOrg}
+                className="rounded-sm border border-current px-2 py-0.5 font-semibold hover:opacity-80"
+              >
+                Salir a Organización Principal
+              </button>
+            )}
+          </div>
+        )}
 
         {aviso}
 

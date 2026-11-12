@@ -7,6 +7,7 @@ import {
   Kanban,
   ListChecks,
   Settings,
+  ShieldCheck,
   Sparkles,
   Users,
   type LucideIcon,
@@ -52,6 +53,7 @@ export function appNavGroups({
   agenda = false,
   role,
   clinical = false,
+  superAdmin = false,
 }: {
   /** 015 — "Citas" solo existe si esta instancia encendió la agenda. */
   agenda?: boolean;
@@ -59,6 +61,8 @@ export function appNavGroups({
   role?: string | null;
   /** Módulo clínico MDental Láser */
   clinical?: boolean;
+  /** Consola de administración SaaS multi-inquilino */
+  superAdmin?: boolean;
 }): NavGroup[] {
   const trabajo: NavItem[] = [
     { href: "/inbox", label: "Bandeja", icon: Inbox, badge: true },
@@ -80,12 +84,21 @@ export function appNavGroups({
     { href: "/lab", label: "Laboratorio", icon: FlaskConical }
   );
 
-  return [
+  const groups: NavGroup[] = [
     { title: "Trabajo", items: trabajo },
     { title: "Agente", items: agente },
     // 019 — Se mide al final: primero se atiende y se organiza.
     { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] },
   ];
+
+  if (superAdmin) {
+    groups.push({
+      title: "Administración SaaS",
+      items: [{ href: "/tenants", label: "Organizaciones", icon: ShieldCheck }],
+    });
+  }
+
+  return groups;
 }
 
 export type SettingsLink = { href: string; label: string };
