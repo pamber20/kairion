@@ -155,6 +155,13 @@
       "when": 1792945918020,
       "tag": "0021_majestic_master_mold",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794511464741,
+      "tag": "0022_ycloud_credentials",
+      "breakpoints": true
     }
   ]
 }
