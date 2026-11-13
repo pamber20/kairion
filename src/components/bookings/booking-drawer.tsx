@@ -160,6 +160,19 @@ export function BookingDrawer({
               {canRetrySync(b) && <Badge variant="warning">Sin enlace</Badge>}
             </div>
 
+            {b.professional && (
+              <div className="flex items-center gap-2 rounded-md border bg-subtle/60 px-3 py-1.5 text-xs text-text-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: b.professional.color }}
+                />
+                <span className="font-medium">
+                  {b.professional.name}
+                  {b.professional.specialty ? ` (${b.professional.specialty})` : ""}
+                </span>
+              </div>
+            )}
+
             {active && endMs < nowMs && isSession && (
               <p className="rounded-sm bg-warning-tint px-3 py-2 text-xs text-warning-text">
                 La hora ya pasó: márcala como realizada o como que no asistió.

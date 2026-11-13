@@ -23,10 +23,13 @@ export const dynamic = "force-dynamic";
 export const GET = withAuth(async (session, req: Request) => {
   if (!agendaEnabled()) return agendaDisabledResponse();
   const url = new URL(req.url);
+  const professionalId = url.searchParams.get("professionalId") || undefined;
   const query = parseRangeQuery(url.searchParams.get("from"), url.searchParams.get("to"));
   if (!query.ok) return apiError(422, "invalid_range", query.message);
   if (!query.range) {
-    const bookings = await listBookings(session.organizationId);
+    const bookings = await listBookings(session.organizationId, undefined, {
+      professionalId,
+    });
     return Response.json({ bookings });
   }
 
@@ -34,7 +37,8 @@ export const GET = withAuth(async (session, req: Request) => {
   const { bookings, truncated } = await listBookingsInRange(
     session.organizationId,
     query.range,
-    settings
+    settings,
+    { professionalId }
   );
   return Response.json({
     bookings,
@@ -52,12 +56,16 @@ const postSchema = z.discriminatedUnion("kind", [
     conversationId: z.string().min(1).nullish(),
     startUtc: z.string().min(1),
     notes: z.string().nullish(),
+    professionalId: z.string().nullish(),
+    specialistName: z.string().nullish(),
+    procedureName: z.string().nullish(),
   }),
   z.object({
     kind: z.literal("block"),
     startUtc: z.string().min(1),
     durationMinutes: z.number().int().min(5).max(600),
     notes: z.string().nullish(),
+    professionalId: z.string().nullish(),
   }),
 ]);
 
@@ -83,6 +91,7 @@ export const POST = withAuth(async (session, req: Request) => {
         startUtc: body.data.startUtc,
         durationMinutes: body.data.durationMinutes,
         notes: body.data.notes ?? null,
+        professionalId: body.data.professionalId ?? null,
       });
       return Response.json({ booking: { id: block.id } }, { status: 201 });
     }
@@ -93,6 +102,9 @@ export const POST = withAuth(async (session, req: Request) => {
       conversationId: body.data.conversationId ?? null,
       startUtc: body.data.startUtc,
       notes: body.data.notes ?? null,
+      professionalId: body.data.professionalId ?? null,
+      specialistName: body.data.specialistName ?? null,
+      procedureName: body.data.procedureName ?? null,
       source: "manual",
       requireOffer: false,
     });

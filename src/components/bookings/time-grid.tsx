@@ -282,6 +282,14 @@ function EventBlock({
       }}
     >
       <span className="flex min-w-0 max-w-full items-center gap-1 font-semibold">
+        {b.professional && (
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: b.professional.color }}
+            title={b.professional.name}
+          />
+        )}
         {b.source === "ai" && b.kind === "session" && (
           <Sparkles aria-label="Agendó la IA" className="h-3 w-3 shrink-0" strokeWidth={2} />
         )}

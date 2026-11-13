@@ -97,7 +97,7 @@ describe("ajustes en tres secciones", () => {
     ).toEqual(["Estado", "WhatsApp", "Instagram", "Messenger", "TikTok"]);
     expect(links(settingsSections({ agenda: true }))).toEqual({
       Canales: ["WhatsApp"],
-      Agente: ["IA", "Agenda"],
+      Agente: ["IA", "Agenda", "Profesionales"],
       Negocio: ["Marca", "Plantillas", "Equipo"],
     });
     expect(links(settingsSections({ atribucion: true }))).toEqual({
@@ -127,6 +127,7 @@ describe("ajustes en tres secciones", () => {
         "/settings/tiktok",
         "/settings/ai",
         "/settings/calendar",
+        "/settings/professionals",
         "/settings/branding",
         "/settings/templates",
         "/settings/team",

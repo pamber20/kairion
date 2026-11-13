@@ -98,6 +98,10 @@ export function BookingsClient({
   const [loadError, setLoadError] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [showTests, setShowTests] = useState(false);
+  const [professionals, setProfessionals] = useState<
+    { id: string; name: string; color: string }[]
+  >([]);
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Booking | null>(null);
   const [blockDraft, setBlockDraft] = useState<{ day: string; time: string } | null>(null);
@@ -123,6 +127,17 @@ export function BookingsClient({
     return () => window.clearInterval(t);
   }, [initialView]);
 
+  useEffect(() => {
+    void fetch("/api/professionals?active=true")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.professionals) {
+          setProfessionals(d.professionals);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const range = useMemo(
     () => (view ? visibleRange(view, anchor, listTo) : null),
     [view, anchor, listTo]
@@ -132,39 +147,45 @@ export function BookingsClient({
   const rangeRef = useRef(rangeKey);
   rangeRef.current = rangeKey;
 
-  const load = useCallback(async (key: string) => {
-    const [from, to] = key.split("|") as [string, string];
-    const id = ++seq.current;
-    setLoading(true);
-    const res = await fetch(`/api/bookings?from=${from}&to=${to}`).catch(() => null);
-    const data = res?.ok
-      ? ((await res.json().catch(() => null)) as {
-          bookings: Booking[];
-          timezone: string;
-          weeklyHours: WeeklyHours;
-          truncated?: boolean;
-        } | null)
-      : null;
-    // Varias navegaciones seguidas: solo se pinta la respuesta del último rango.
-    if (id !== seq.current) return;
-    setLoading(false);
-    if (!data) {
-      setLoadError(true);
-      return;
-    }
-    setLoadError(false);
-    setTimezone(data.timezone);
-    setWeeklyHours(data.weeklyHours);
-    setLoaded({ key, bookings: data.bookings, truncated: Boolean(data.truncated) });
-  }, []);
+  const load = useCallback(
+    async (key: string, profId?: string | null) => {
+      const [from, to] = key.split("|") as [string, string];
+      const id = ++seq.current;
+      setLoading(true);
+      const profParam = profId ? `&professionalId=${encodeURIComponent(profId)}` : "";
+      const res = await fetch(`/api/bookings?from=${from}&to=${to}${profParam}`).catch(
+        () => null
+      );
+      const data = res?.ok
+        ? ((await res.json().catch(() => null)) as {
+            bookings: Booking[];
+            timezone: string;
+            weeklyHours: WeeklyHours;
+            truncated?: boolean;
+          } | null)
+        : null;
+      // Varias navegaciones seguidas: solo se pinta la respuesta del último rango.
+      if (id !== seq.current) return;
+      setLoading(false);
+      if (!data) {
+        setLoadError(true);
+        return;
+      }
+      setLoadError(false);
+      setTimezone(data.timezone);
+      setWeeklyHours(data.weeklyHours);
+      setLoaded({ key, bookings: data.bookings, truncated: Boolean(data.truncated) });
+    },
+    []
+  );
 
   const reload = useCallback(async () => {
-    if (rangeRef.current) await load(rangeRef.current);
-  }, [load]);
+    if (rangeRef.current) await load(rangeRef.current, selectedProfId);
+  }, [load, selectedProfId]);
 
   useEffect(() => {
-    if (rangeKey) void load(rangeKey);
-  }, [rangeKey, load]);
+    if (rangeKey) void load(rangeKey, selectedProfId);
+  }, [rangeKey, selectedProfId, load]);
 
   // La agenda cambia también cuando agenda la IA. Antes cada evento pedía la
   // lista Y la disponibilidad de toda la ventana; ahora una ráfaga de eventos
@@ -326,6 +347,9 @@ export function BookingsClient({
         listTo={clampListTo(anchor, listTo)}
         label={rangeLabel(view, anchor, listTo)}
         loading={loading}
+        professionals={professionals}
+        selectedProfessionalId={selectedProfId}
+        onSelectProfessional={setSelectedProfId}
         onToday={goToday}
         onShift={shift}
         onJump={setAnchor}

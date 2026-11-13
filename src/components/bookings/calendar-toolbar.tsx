@@ -33,6 +33,9 @@ export function CalendarToolbar({
   listTo,
   label,
   loading,
+  professionals,
+  selectedProfessionalId,
+  onSelectProfessional,
   onToday,
   onShift,
   onJump,
@@ -45,6 +48,9 @@ export function CalendarToolbar({
   listTo: string;
   label: string;
   loading: boolean;
+  professionals?: { id: string; name: string; color: string }[];
+  selectedProfessionalId?: string | null;
+  onSelectProfessional?: (id: string | null) => void;
   onToday: () => void;
   onShift: (dir: 1 | -1) => void;
   onJump: (day: string) => void;
@@ -134,6 +140,21 @@ export function CalendarToolbar({
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {professionals && professionals.length > 0 && (
+          <select
+            value={selectedProfessionalId ?? ""}
+            onChange={(e) => onSelectProfessional?.(e.target.value || null)}
+            className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-soft"
+            aria-label="Filtrar por profesional"
+          >
+            <option value="">Todos los profesionales</option>
+            {professionals.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <div role="group" aria-label="Vista" className="inline-flex rounded-full border bg-secondary p-0.5">
           {(Object.keys(VIEW_LABEL) as CalendarView[]).map((v) => (
             <button

@@ -23,6 +23,8 @@ export const GET = withAuth(async (session, req: Request) => {
   const url = new URL(req.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
+  const professionalId = url.searchParams.get("professionalId");
+  const specialty = url.searchParams.get("specialty");
 
   const settings = await getSettings(session.organizationId);
   const now = new Date();
@@ -31,6 +33,8 @@ export const GET = withAuth(async (session, req: Request) => {
     toISO: to && ISO_DATE.test(to) ? to : undefined,
     settings,
     now,
+    professionalId,
+    specialty,
   });
 
   return Response.json({

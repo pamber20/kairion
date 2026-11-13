@@ -30,6 +30,7 @@ import {
 import { agendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
+import { listProfessionals } from "@/server/agenda/professionals";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -248,6 +249,9 @@ export async function runAgentTurn(
     .orderBy(asc(schema.pipelineStage.position));
 
   const agenda = agendaEnabled();
+  const professionals = agenda
+    ? await listProfessionals(organizationId, { onlyActive: true })
+    : [];
 
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
@@ -275,7 +279,13 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda }),
+      content: buildAgentSystemPrompt({
+        profile,
+        kb,
+        stages,
+        agenda,
+        professionals,
+      }),
     },
     ...history
       .filter((m) => m.text)
@@ -320,12 +330,15 @@ export async function runAgentTurn(
                 organizationId,
                 conversationId,
                 intro: action.reply,
+                professionalId: action.professionalId,
+                specialty: action.specialty,
               })
             : await bookSlot({
                 organizationId,
                 conversationId,
                 startUtc: action.startUtc,
                 confirmation: action.reply,
+                professionalId: action.professionalId,
               });
         await deliverReply(conversation, turn.text);
         if (turn.ok) {

@@ -26,6 +26,15 @@ export type BookingListItem = {
   linkPending: boolean;
   isTest: boolean;
   notes: string | null;
+  professionalId?: string | null;
+  professional?: {
+    id: string;
+    name: string;
+    specialty: string | null;
+    color: string;
+  } | null;
+  procedureName?: string | null;
+  specialistName?: string | null;
 };
 
 /** Tope del listado sin rango: el de siempre, que leen los guiones E2E. */
@@ -50,6 +59,10 @@ type Row = {
   booking: typeof schema.booking.$inferSelect;
   contactId: string | null;
   contactName: string | null;
+  profId: string | null;
+  profName: string | null;
+  profSpecialty: string | null;
+  profColor: string | null;
 };
 
 function baseQuery() {
@@ -58,19 +71,36 @@ function baseQuery() {
       booking: schema.booking,
       contactId: schema.contact.id,
       contactName: schema.contact.name,
+      profId: schema.professional.id,
+      profName: schema.professional.name,
+      profSpecialty: schema.professional.specialty,
+      profColor: schema.professional.color,
     })
     .from(schema.booking)
-    .leftJoin(schema.contact, eq(schema.booking.contactId, schema.contact.id));
+    .leftJoin(schema.contact, eq(schema.booking.contactId, schema.contact.id))
+    .leftJoin(
+      schema.professional,
+      eq(schema.booking.professionalId, schema.professional.id)
+    );
 }
 
 /** Las últimas 200 citas: el listado de siempre, para quien no pide rango. */
 export async function listBookings(
   organizationId: string,
-  settings?: CalendarSettings
+  settings?: CalendarSettings,
+  opts?: { professionalId?: string | null }
 ): Promise<BookingListItem[]> {
   const resolved = settings ?? (await getSettings(organizationId));
+  const whereClause = opts?.professionalId
+    ? scoped(
+        schema.booking.organizationId,
+        organizationId,
+        eq(schema.booking.professionalId, opts.professionalId)
+      )
+    : scoped(schema.booking.organizationId, organizationId);
+
   const rows = await baseQuery()
-    .where(scoped(schema.booking.organizationId, organizationId))
+    .where(whereClause)
     .orderBy(desc(schema.booking.scheduledAt))
     .limit(LIST_LIMIT);
   return rows.map((r) => toListItem(r, resolved.timezone));
@@ -86,7 +116,8 @@ export async function listBookings(
 export async function listBookingsInRange(
   organizationId: string,
   range: DateRange,
-  settings?: CalendarSettings
+  settings?: CalendarSettings,
+  opts?: { professionalId?: string | null }
 ): Promise<{ bookings: BookingListItem[]; truncated: boolean }> {
   const resolved = settings ?? (await getSettings(organizationId));
   const tz = resolved.timezone;
@@ -94,15 +125,23 @@ export async function listBookingsInRange(
   const start = zonedWallClockToUtc(range.from, "00:00", tz)!;
   const end = zonedWallClockToUtc(addDaysISO(range.to, 1), "00:00", tz)!;
 
-  const rows = await baseQuery()
-    .where(
-      scoped(
+  const whereClause = opts?.professionalId
+    ? scoped(
+        schema.booking.organizationId,
+        organizationId,
+        gte(schema.booking.scheduledAt, new Date(start.getTime() - LOOKBACK_MS)),
+        lt(schema.booking.scheduledAt, end),
+        eq(schema.booking.professionalId, opts.professionalId)
+      )
+    : scoped(
         schema.booking.organizationId,
         organizationId,
         gte(schema.booking.scheduledAt, new Date(start.getTime() - LOOKBACK_MS)),
         lt(schema.booking.scheduledAt, end)
-      )
-    )
+      );
+
+  const rows = await baseQuery()
+    .where(whereClause)
     .orderBy(asc(schema.booking.scheduledAt))
     .limit(RANGE_LIMIT);
 
@@ -138,5 +177,16 @@ function toListItem(r: Row, timezone: string): BookingListItem {
     linkPending: r.booking.linkPending,
     isTest: r.booking.isTest,
     notes: r.booking.notes,
+    professionalId: r.booking.professionalId ?? null,
+    professional: r.profId
+      ? {
+          id: r.profId,
+          name: r.profName ?? "",
+          specialty: r.profSpecialty ?? null,
+          color: r.profColor ?? "#3b82f6",
+        }
+      : null,
+    procedureName: r.booking.procedureName ?? null,
+    specialistName: r.booking.specialistName ?? null,
   };
 }

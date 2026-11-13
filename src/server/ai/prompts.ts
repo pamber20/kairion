@@ -40,13 +40,29 @@ export function buildAgentSystemPrompt(input: {
    * token en hablar de horarios: la agenda no existe aquí.
    */
   agenda?: boolean;
+  /** Profesionales activos de la organización para agenda multi-profesional */
+  professionals?: { id: string; name: string; specialty?: string | null }[];
 }): string {
-  const { profile } = input;
+  const { profile, professionals = [] } = input;
   const stageNames = input.stages.map((s) => s.name).join(" | ");
+
+  const hasProfessionals = professionals.length > 0;
+  const profBlock =
+    input.agenda && hasProfessionals
+      ? [
+          "PROFESIONALES / ESPECIALISTAS ACTIVOS:",
+          ...professionals.map(
+            (p) =>
+              `- ID "${p.id}": ${p.name}${p.specialty ? ` (${p.specialty})` : ""}`
+          ),
+          "Si el cliente solicita cita con un profesional específico o para un área/especialidad concreta, incluye professionalId o specialty al llamar a offer_slots.",
+        ].join("\n")
+      : null;
+
   const agendaLines = input.agenda
     ? [
-        '- {"action":"offer_slots","reply":"..."} — ofrecer horarios para agendar (reply es solo la frase de entrada; los horarios los pone el sistema).',
-        '- {"action":"book_slot","startUtc":"<uno de los horarios que el sistema ofreció, en ISO UTC>","reply":"..."} — agendar el horario que el cliente eligió.',
+        '- {"action":"offer_slots","reply":"...","professionalId":"...","specialty":"..."} — ofrecer horarios para agendar (reply es la frase de entrada; los horarios los pone el sistema). Opcionalmente filtra por professionalId o specialty.',
+        '- {"action":"book_slot","startUtc":"<uno de los horarios que el sistema ofreció, en ISO UTC>","reply":"...","professionalId":"..."} — agendar el horario que el cliente eligió.',
       ]
     : [];
   const agendaRules = input.agenda
@@ -64,6 +80,7 @@ export function buildAgentSystemPrompt(input: {
       ? `Reglas de escalado a humano:\n${profile.escalationRules}`
       : null,
     profile.greeting ? `Saludo sugerido para conversaciones nuevas: ${profile.greeting}` : null,
+    profBlock,
     `CONOCIMIENTO DEL NEGOCIO (tu única fuente de verdad; si algo no está aquí, NO lo inventes — di que lo confirmarás con el equipo o escala):\n${renderKb(input.kb)}`,
     `Etapas del pipeline disponibles: ${stageNames}`,
     [

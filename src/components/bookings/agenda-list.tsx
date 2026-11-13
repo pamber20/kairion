@@ -94,6 +94,7 @@ export function AgendaList({
                       )}
                     </span>
                     <span className="block truncate text-xs text-text-3">
+                      {b.professional ? `${b.professional.name} · ` : ""}
                       {b.kind === "block"
                         ? `Bloqueo · ${b.durationMinutes} min`
                         : `${b.durationMinutes} min · ${b.source === "ai" ? "Agendó la IA" : "Manual"}${b.isTest ? " · Prueba" : ""}`}

@@ -32,12 +32,16 @@ export async function offerSlots(input: {
   organizationId: string;
   conversationId: string;
   intro?: string;
+  professionalId?: string;
+  specialty?: string;
 }): Promise<AgendaTurn> {
   const settings = await getSettings(input.organizationId);
   const now = new Date();
   const all = await computeAvailability(input.organizationId, {
     settings,
     now,
+    professionalId: input.professionalId,
+    specialty: input.specialty,
   });
   const spread = spreadByDay(all, {
     timezone: settings.timezone,
@@ -61,11 +65,22 @@ export async function offerSlots(input: {
   await replaceOffers(
     input.organizationId,
     input.conversationId,
-    spread.map((s) => ({ startUtc: s.startUtc, label: s.label }))
+    spread.map((s) => ({
+      startUtc: s.startUtc,
+      label: s.professionalName
+        ? `${s.dayLabel} a las ${s.time} con ${s.professionalName}`
+        : `${s.dayLabel} a las ${s.time}`,
+      professionalId: s.professionalId ?? null,
+    }))
   );
 
   const shown = spread.slice(0, SHOWN);
-  const lista = shown.map((s) => `• ${s.dayLabel} a las ${s.time}`).join("\n");
+  const lista = shown
+    .map((s) => {
+      const withProf = s.professionalName ? ` con ${s.professionalName}` : "";
+      return `• ${s.dayLabel} a las ${s.time}${withProf}`;
+    })
+    .join("\n");
   const intro = input.intro?.trim() || "Tengo estos horarios disponibles:";
   return { ok: true, text: `${intro}\n${lista}` };
 }
@@ -75,12 +90,14 @@ export async function bookSlot(input: {
   conversationId: string;
   startUtc: string;
   confirmation?: string;
+  professionalId?: string;
 }): Promise<AgendaTurn> {
   try {
     const result = await createSessionBooking({
       organizationId: input.organizationId,
       conversationId: input.conversationId,
       startUtc: input.startUtc,
+      professionalId: input.professionalId,
       source: "ai",
       requireOffer: true,
     });

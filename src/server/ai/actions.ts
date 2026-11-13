@@ -39,11 +39,14 @@ const agendaActions = [
   z.object({
     action: z.literal("offer_slots"),
     reply: z.string().optional(),
+    professionalId: z.string().optional(),
+    specialty: z.string().optional(),
   }),
   z.object({
     action: z.literal("book_slot"),
     startUtc: z.string().min(1),
     reply: z.string().optional(),
+    professionalId: z.string().optional(),
   }),
 ] as const;
 

@@ -89,6 +89,9 @@ export async function createSessionBooking(input: {
   /** Camino manual del operador. */
   contactId?: string | null;
   notes?: string | null;
+  professionalId?: string | null;
+  specialistName?: string | null;
+  procedureName?: string | null;
   /**
    * true ⇒ exige que el instante figure entre los ofrecidos a la conversación
    * (agente/bot). El operador elige de la disponibilidad que está viendo, así
@@ -134,6 +137,8 @@ export async function createSessionBooking(input: {
   }
   contactName = await getContactName(input.organizationId, contactId);
 
+  let offeredProfId: string | null = null;
+
   // REGLA 1: solo se reserva lo que se ofreció.
   if (input.requireOffer) {
     if (!input.conversationId) {
@@ -143,19 +148,24 @@ export async function createSessionBooking(input: {
       );
     }
     const offers = await getOffers(input.organizationId, input.conversationId);
-    if (!findOffered(offers, input.startUtc)) {
+    const matched = findOffered(offers, input.startUtc);
+    if (!matched) {
       throw new BookingError(
         "slot_not_offered",
         "Ese horario no se ofreció en esta conversación",
         offers
       );
     }
+    offeredProfId = matched.professionalId ?? null;
   }
+
+  const profIdToTarget = input.professionalId ?? offeredProfId ?? undefined;
 
   // REGLA 2 (primera mitad): el hueco debe seguir libre AHORA.
   const slot = await findSlot(input.organizationId, input.startUtc, {
     now: input.now,
     settings,
+    professionalId: profIdToTarget,
   });
   if (!slot) {
     throw new BookingError(
@@ -163,9 +173,15 @@ export async function createSessionBooking(input: {
       "Ese horario ya no está disponible",
       await refreshOffer(input.organizationId, input.conversationId, {
         now: input.now,
+        professionalId: profIdToTarget,
       })
     );
   }
+
+  const resolvedProfId =
+    input.professionalId ?? offeredProfId ?? slot.professionalId ?? null;
+  const resolvedSpecialist =
+    input.specialistName ?? slot.professionalName ?? null;
 
   const leadRows = await db
     .select({ id: schema.lead.id })
@@ -198,6 +214,9 @@ export async function createSessionBooking(input: {
         connector: settings.connector,
         isTest,
         notes: input.notes ?? null,
+        professionalId: resolvedProfId,
+        specialistName: resolvedSpecialist,
+        procedureName: input.procedureName ?? null,
       })
       .returning();
     booking = inserted[0]!;
@@ -211,6 +230,7 @@ export async function createSessionBooking(input: {
         "Ese horario acaba de ocuparse",
         await refreshOffer(input.organizationId, input.conversationId, {
           now: input.now,
+          professionalId: resolvedProfId,
         })
       );
     }
@@ -254,6 +274,7 @@ export async function createBlock(input: {
   startUtc: string;
   durationMinutes: number;
   notes?: string | null;
+  professionalId?: string | null;
 }): Promise<BookingRow> {
   if (Number.isNaN(Date.parse(input.startUtc))) {
     throw new BookingError("invalid", "Instante inválido");
@@ -270,6 +291,7 @@ export async function createBlock(input: {
         scheduledAt: new Date(input.startUtc),
         durationMinutes: input.durationMinutes,
         notes: input.notes ?? null,
+        professionalId: input.professionalId ?? null,
       })
       .returning();
     const block = inserted[0]!;
@@ -304,6 +326,7 @@ export async function rescheduleBooking(input: {
     excludeBookingId: booking.id,
     now: input.now,
     settings,
+    professionalId: booking.professionalId,
   });
   if (!slot) {
     throw new BookingError("slot_taken", "Ese horario ya no está disponible");
@@ -622,14 +645,16 @@ async function withConnector(
 async function refreshOffer(
   organizationId: string,
   conversationId: string | null | undefined,
-  opts: { now?: Date }
+  opts: { now?: Date; professionalId?: string | null }
 ): Promise<OfferedSlot[]> {
   let fresh: AvailableSlot[] = [];
   try {
-    fresh = (await computeAvailability(organizationId, { now: opts.now })).slice(
-      0,
-      FRESH_ALTERNATIVES
-    );
+    fresh = (
+      await computeAvailability(organizationId, {
+        now: opts.now,
+        professionalId: opts.professionalId,
+      })
+    ).slice(0, FRESH_ALTERNATIVES);
   } catch (err) {
     console.warn(`[agenda] no pude calcular alternativas: ${err}`);
     return [];
@@ -637,6 +662,7 @@ async function refreshOffer(
   const offers: OfferedSlot[] = fresh.map((s) => ({
     startUtc: s.startUtc,
     label: s.label,
+    professionalId: s.professionalId ?? null,
   }));
   if (conversationId && offers.length > 0) {
     await replaceOffers(organizationId, conversationId, offers).catch((err) => {

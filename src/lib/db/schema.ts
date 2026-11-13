@@ -837,6 +837,35 @@ export const calendarSettings = pgTable(
 );
 
 /**
+ * Profesional o especialista de la organización para gestión de agenda multi-profesional.
+ */
+export const professional = pgTable(
+  "professional",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    specialty: text("specialty"),
+    email: text("email"),
+    phone: text("phone"),
+    color: text("color").notNull().default("#3b82f6"),
+    isActive: boolean("is_active").notNull().default(true),
+    /** `{"mon":[{"start":"09:00","end":"18:00"}]}` — si null, hereda calendarSettings.weeklyHours */
+    weeklyHours: jsonb("weekly_hours"),
+    slotMinutes: integer("slot_minutes"),
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("professional_org_idx").on(t.organizationId),
+    index("professional_org_active_idx").on(t.organizationId, t.isActive),
+  ]
+);
+
+/**
  * La cita. Una sola tabla para sesiones y bloqueos manuales: un bloqueo es
  * una cita sin contacto que ocupa agenda igual.
  */
@@ -893,6 +922,9 @@ export const booking = pgTable(
     /** Campos clínicos especializados para clínica odontológica */
     procedureName: text("procedure_name"),
     specialistName: text("specialist_name"),
+    professionalId: text("professional_id").references(() => professional.id, {
+      onDelete: "set null",
+    }),
     dentalChair: text("dental_chair"),
     patientConfirmation: text("patient_confirmation", {
       enum: ["unconfirmed", "confirmed", "reschedule_requested"],
@@ -910,18 +942,21 @@ export const booking = pgTable(
   (t) => [
     index("booking_org_when_idx").on(t.organizationId, t.scheduledAt),
     index("booking_org_status_idx").on(t.organizationId, t.status),
+    index("booking_org_prof_idx").on(t.organizationId, t.professionalId),
     /**
-     * Anti doble-booking ATÓMICO. La re-validación al confirmar deja una
-     * ventana entre leer y escribir; esto la cierra en la BASE: dos
-     * confirmaciones simultáneas del mismo instante no pueden ganar las dos, y
-     * la perdedora recibe un 23505 que el servicio traduce a `slot_taken` con
-     * alternativas frescas. Las citas de prueba quedan fuera: no consumen la
-     * agenda real.
+     * Anti doble-booking ATÓMICO.
+     * Si la cita tiene profesional asignado: previene que ese profesional tenga dos citas en el mismo instante.
+     * Si la cita NO tiene profesional (agenda general): previene que la clínica tenga dos citas en el mismo instante.
      */
     uniqueIndex("booking_org_active_slot_uq")
+      .on(t.organizationId, t.professionalId, t.scheduledAt)
+      .where(
+        sql`${t.status} in ('agendada','realizada') and ${t.isTest} = false and ${t.professionalId} is not null`
+      ),
+    uniqueIndex("booking_org_general_active_slot_uq")
       .on(t.organizationId, t.scheduledAt)
       .where(
-        sql`${t.status} in ('agendada','realizada') and ${t.isTest} = false`
+        sql`${t.status} in ('agendada','realizada') and ${t.isTest} = false and ${t.professionalId} is null`
       ),
   ]
 );
@@ -948,6 +983,7 @@ export const offeredSlot = pgTable(
     startUtc: timestamp("start_utc").notNull(),
     /** La etiqueta EXACTA que se le mostró al cliente. */
     label: text("label").notNull(),
+    professionalId: text("professional_id"),
     offeredAt: timestamp("offered_at").notNull().defaultNow(),
   },
   (t) => [index("offered_slot_conv_idx").on(t.conversationId, t.startUtc)]
