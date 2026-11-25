@@ -9,6 +9,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Stethoscope,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -86,10 +87,20 @@ export function appNavGroups({
 
   const groups: NavGroup[] = [
     { title: "Trabajo", items: trabajo },
+  ];
+
+  if (agenda) {
+    groups.push({
+      title: "Operación Profesional",
+      items: [{ href: "/professionals", label: "Profesionales", icon: Stethoscope }],
+    });
+  }
+
+  groups.push(
     { title: "Agente", items: agente },
     // 019 — Se mide al final: primero se atiende y se organiza.
-    { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] },
-  ];
+    { items: [{ href: "/results", label: "Resultados", icon: ChartColumn }] }
+  );
 
   if (superAdmin) {
     groups.push({
@@ -149,7 +160,6 @@ export function settingsSections({
   const agente: SettingsLink[] = [{ href: "/settings/ai", label: "IA" }];
   if (agenda) {
     agente.push({ href: "/settings/calendar", label: "Agenda" });
-    agente.push({ href: "/settings/professionals", label: "Profesionales" });
   }
 
   const negocio: SettingsLink[] = [

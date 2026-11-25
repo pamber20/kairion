@@ -26,8 +26,9 @@ describe("barra lateral agrupada", () => {
     ]);
   });
 
-  it("AGENDA añade Citas al final de Trabajo", () => {
-    const [trabajo] = appNavGroups({ agenda: true, role: "member" });
+  it("AGENDA añade Citas al final de Trabajo y la sección Operación Profesional", () => {
+    const groups = appNavGroups({ agenda: true, role: "member" });
+    const [trabajo, opProf] = groups;
     expect(trabajo!.items.map((i) => i.label)).toEqual([
       "Bandeja",
       "Pipeline",
@@ -35,6 +36,11 @@ describe("barra lateral agrupada", () => {
       "Citas",
     ]);
     expect(trabajo!.items.at(-1)!.href).toBe("/bookings");
+    expect(opProf).toBeDefined();
+    expect(opProf!.title).toBe("Operación Profesional");
+    expect(opProf!.items.map((i) => ({ href: i.href, label: i.label }))).toEqual([
+      { href: "/professionals", label: "Profesionales" },
+    ]);
   });
 
   it("la guía de inicio abre el grupo Agente solo para quien configura", () => {
@@ -97,7 +103,7 @@ describe("ajustes en tres secciones", () => {
     ).toEqual(["Estado", "WhatsApp", "Instagram", "Messenger", "TikTok"]);
     expect(links(settingsSections({ agenda: true }))).toEqual({
       Canales: ["WhatsApp"],
-      Agente: ["IA", "Agenda", "Profesionales"],
+      Agente: ["IA", "Agenda"],
       Negocio: ["Marca", "Plantillas", "Equipo"],
     });
     expect(links(settingsSections({ atribucion: true }))).toEqual({
@@ -127,7 +133,6 @@ describe("ajustes en tres secciones", () => {
         "/settings/tiktok",
         "/settings/ai",
         "/settings/calendar",
-        "/settings/professionals",
         "/settings/branding",
         "/settings/templates",
         "/settings/team",

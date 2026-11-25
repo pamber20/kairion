@@ -1,10 +1,7 @@
-import { notFound } from "next/navigation";
-import { ProfessionalsClient } from "@/components/settings/professionals-client";
-import { agendaEnabled } from "@/server/agenda/flag";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function ProfessionalsSettingsPage() {
-  if (!agendaEnabled()) notFound();
-  return <ProfessionalsClient />;
+export default function ProfessionalsSettingsRedirectPage() {
+  redirect("/professionals");
 }
