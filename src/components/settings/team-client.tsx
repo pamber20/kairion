@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRightLeft, UserPlus } from "lucide-react";
 import { ContactAvatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,12 @@ type Member = {
 };
 
 export function TeamClient() {
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
+  const [canTransferOwnership, setCanTransferOwnership] = useState(false);
+  const [confirmMember, setConfirmMember] = useState<Member | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [tempPassword, setTempPassword] = useState("");
@@ -29,8 +35,12 @@ export function TeamClient() {
   const refetch = useCallback(async () => {
     const res = await fetch("/api/settings/team").catch(() => null);
     if (!res?.ok) return;
-    const data = (await res.json()) as { members: Member[] };
+    const data = (await res.json()) as {
+      canTransferOwnership?: boolean;
+      members: Member[];
+    };
     setMembers(data.members);
+    setCanTransferOwnership(Boolean(data.canTransferOwnership));
   }, []);
 
   useEffect(() => {
@@ -69,6 +79,28 @@ export function TeamClient() {
     setEmail("");
     setTempPassword("");
     void refetch();
+  }
+
+  async function confirmTransfer() {
+    if (!confirmMember) return;
+    setTransferring(true);
+    setTransferError(null);
+    const res = await fetch("/api/settings/team/transfer-owner", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ memberId: confirmMember.id }),
+    }).catch(() => null);
+    setTransferring(false);
+    if (!res?.ok) {
+      const data = (await res?.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      setTransferError(data?.error?.message ?? "No se pudo transferir la propiedad");
+      return;
+    }
+    setConfirmMember(null);
+    void refetch();
+    router.refresh();
   }
 
   return (
@@ -143,19 +175,72 @@ export function TeamClient() {
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Miembros
         </p>
+        {transferError && (
+          <p className="text-sm text-destructive">{transferError}</p>
+        )}
+        {confirmMember && (
+          <div className="rounded-lg border border-warning-soft bg-warning-tint p-4 text-sm space-y-3">
+            <div>
+              <p className="font-semibold text-foreground">
+                ¿Transferir propiedad a {confirmMember.name}?
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                <code>{confirmMember.email}</code> pasará a ser el{" "}
+                <strong>Propietario</strong> de esta organización y el propietario
+                actual pasará a rol <strong>Miembro</strong>.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={transferring}
+                onClick={() => void confirmTransfer()}
+              >
+                {transferring ? "Transfiriendo…" : "Confirmar transferencia"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={transferring}
+                onClick={() => {
+                  setConfirmMember(null);
+                  setTransferError(null);
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
         {members.map((m) => (
           <div
             key={m.id}
-            className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3"
+            className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3"
           >
             <ContactAvatar name={m.name} seed={m.id} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{m.name}</p>
               <p className="text-xs text-muted-foreground">{m.email}</p>
             </div>
-            <Badge variant={m.role === "owner" ? "default" : "secondary"}>
-              {m.role === "owner" ? "Propietario" : "Miembro"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={m.role === "owner" ? "default" : "secondary"}>
+                {m.role === "owner" ? "Propietario" : "Miembro"}
+              </Badge>
+              {canTransferOwnership && m.role !== "owner" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTransferError(null);
+                    setConfirmMember(m);
+                  }}
+                  className="h-7 gap-1 px-2.5 text-xs"
+                >
+                  <ArrowRightLeft className="h-3 w-3" />
+                  Hacer propietario
+                </Button>
+              )}
+            </div>
           </div>
         ))}
       </div>

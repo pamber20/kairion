@@ -13,6 +13,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
@@ -67,6 +68,20 @@ export default function TenantsPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editAccentColor, setEditAccentColor] = useState("#0d5bff");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Modal de cambio de propietario
+  const [ownerTenant, setOwnerTenant] = useState<TenantSummary | null>(null);
+  const [newOwnerEmail, setNewOwnerEmail] = useState("");
+  const [newOwnerName, setNewOwnerName] = useState("");
+  const [newOwnerPassword, setNewOwnerPassword] = useState("");
+  const [needsNewAccount, setNeedsNewAccount] = useState(false);
+  const [ownerError, setOwnerError] = useState<string | null>(null);
+  const [savingOwner, setSavingOwner] = useState(false);
+  const [ownerSuccessCreds, setOwnerSuccessCreds] = useState<{
+    orgName: string;
+    email: string;
+    password?: string;
+  } | null>(null);
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -238,6 +253,73 @@ export default function TenantsPage() {
     }
   }
 
+  function openOwnerModal(t: TenantSummary) {
+    setOwnerTenant(t);
+    setNewOwnerEmail("");
+    setNewOwnerName("");
+    setNewOwnerPassword("");
+    setNeedsNewAccount(false);
+    setOwnerError(null);
+  }
+
+  function generateOwnerPassword() {
+    const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = new Uint32Array(14);
+    crypto.getRandomValues(bytes);
+    setNewOwnerPassword(
+      Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("")
+    );
+  }
+
+  async function handleChangeOwner(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ownerTenant) return;
+    setSavingOwner(true);
+    setOwnerError(null);
+    try {
+      const payload: Record<string, string> = {
+        email: newOwnerEmail.trim(),
+      };
+      if (needsNewAccount) {
+        if (newOwnerName.trim()) payload.name = newOwnerName.trim();
+        if (newOwnerPassword) payload.password = newOwnerPassword;
+      }
+
+      const res = await fetch(`/api/tenants/${ownerTenant.id}/owner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        createdAccount?: boolean;
+        owner?: { email: string };
+        error?: { code?: string; message?: string };
+      } | null;
+
+      if (!res.ok) {
+        if (json?.error?.code === "user_not_found") {
+          setNeedsNewAccount(true);
+        }
+        setOwnerError(
+          json?.error?.message ?? "No se pudo cambiar el propietario"
+        );
+        return;
+      }
+
+      setOwnerSuccessCreds({
+        orgName: ownerTenant.name,
+        email: json?.owner?.email ?? newOwnerEmail.trim(),
+        password: json?.createdAccount ? newOwnerPassword : undefined,
+      });
+      setOwnerTenant(null);
+      await loadTenants();
+      router.refresh();
+    } finally {
+      setSavingOwner(false);
+    }
+  }
+
   if (!loading && data && !data.isSuperAdmin) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -276,6 +358,33 @@ export default function TenantsPage() {
       </header>
 
       <div className="space-y-6 p-6">
+        {ownerSuccessCreds && (
+          <div className="flex items-start justify-between gap-3 rounded-md border border-success-soft bg-success-tint px-4 py-3 text-sm">
+            <div>
+              <p className="font-semibold text-success-text">
+                Propietario actualizado para {ownerSuccessCreds.orgName} ✓
+              </p>
+              <p className="mt-0.5 text-xs text-success-text opacity-90">
+                Nuevo propietario: <code>{ownerSuccessCreds.email}</code>
+                {ownerSuccessCreds.password && (
+                  <>
+                    {" "}
+                    · Contraseña temporal:{" "}
+                    <code>{ownerSuccessCreds.password}</code> (compártela ahora,
+                    no se volverá a mostrar)
+                  </>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOwnerSuccessCreds(null)}
+              className="rounded p-1 text-success-text hover:bg-black/5"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {/* KPIs Globales */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-md border bg-card p-4">
@@ -537,6 +646,16 @@ export default function TenantsPage() {
                             className="h-8 px-2 text-xs"
                           >
                             <Settings2 className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openOwnerModal(t)}
+                            title="Cambiar propietario"
+                            className="h-8 px-2 text-xs"
+                          >
+                            <UserCog className="h-3.5 w-3.5" />
                           </Button>
 
                           {!t.isPrimary && (
@@ -843,6 +962,128 @@ export default function TenantsPage() {
                 </Button>
                 <Button type="submit" disabled={savingEdit}>
                   {savingEdit ? "Guardando…" : "Guardar cambios"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Cambiar propietario */}
+      {ownerTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border bg-card p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h2 className="text-base font-bold">
+                Cambiar propietario · {ownerTenant.name}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setOwnerTenant(null)}
+                className="rounded p-1 hover:bg-subtle"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangeOwner} className="mt-4 space-y-4">
+              {ownerTenant.owner && (
+                <p className="text-xs text-text-2">
+                  Propietario actual:{" "}
+                  <strong>{ownerTenant.owner.name}</strong> (
+                  <code>{ownerTenant.owner.email}</code>). Al guardar, pasará a
+                  rol Miembro.
+                </p>
+              )}
+
+              {ownerTenant.isPrimary && (
+                <div className="rounded-md border border-warning-soft bg-warning-tint p-3 text-xs text-foreground">
+                  Esta es la organización matriz (<code>principal</code>). Si no
+                  tienes <code>SUPERADMIN_EMAILS</code> definido, el nuevo
+                  propietario heredará permisos de SuperAdmin.
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="newOwnerEmail">
+                  Correo del nuevo propietario *
+                </Label>
+                <Input
+                  id="newOwnerEmail"
+                  type="email"
+                  required
+                  placeholder="dueno@empresa.com"
+                  value={newOwnerEmail}
+                  onChange={(e) => setNewOwnerEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <input
+                  id="needsNewAccount"
+                  type="checkbox"
+                  checked={needsNewAccount}
+                  onChange={(e) => setNeedsNewAccount(e.target.checked)}
+                />
+                <Label htmlFor="needsNewAccount" className="text-xs font-normal cursor-pointer">
+                  Crear cuenta nueva si este correo aún no existe
+                </Label>
+              </div>
+
+              {needsNewAccount && (
+                <div className="space-y-3 rounded-md border bg-subtle/40 p-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newOwnerName">Nombre completo *</Label>
+                    <Input
+                      id="newOwnerName"
+                      required={needsNewAccount}
+                      placeholder="Ej: Laura Gómez"
+                      value={newOwnerName}
+                      onChange={(e) => setNewOwnerName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newOwnerPassword">
+                      Contraseña temporal *
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="newOwnerPassword"
+                        required={needsNewAccount}
+                        minLength={8}
+                        placeholder="mínimo 8 caracteres"
+                        value={newOwnerPassword}
+                        onChange={(e) => setNewOwnerPassword(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={generateOwnerPassword}
+                      >
+                        Generar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {ownerError && (
+                <p className="rounded border border-danger-soft bg-danger-soft px-3 py-2 text-xs text-danger-text">
+                  {ownerError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 border-t pt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOwnerTenant(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={savingOwner}>
+                  {savingOwner ? "Guardando…" : "Asignar propietario"}
                 </Button>
               </div>
             </form>

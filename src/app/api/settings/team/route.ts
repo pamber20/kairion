@@ -22,6 +22,7 @@ export const GET = withAuth(async (session) => {
     .innerJoin(schema.user, eq(schema.member.userId, schema.user.id))
     .where(scoped(schema.member.organizationId, session.organizationId));
   return Response.json({
+    canTransferOwnership: session.role === "owner" || Boolean(session.isSuperAdmin),
     members: members.map((m) => ({
       id: m.id,
       role: m.role,
