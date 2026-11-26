@@ -221,6 +221,42 @@ export type SessionsDto = {
   showRate: RateDto;
 };
 
+/* ── Récord de citas (global, por profesional y por cliente) ───── */
+
+export type BookingsScope = "period" | "all";
+
+export type BookingCountsDto = {
+  total: number;
+  pending: number;
+  done: number;
+  noShow: number;
+  cancelled: number;
+  showRate: RateDto;
+};
+
+export type BookingProfessionalRowDto = BookingCountsDto & {
+  professionalId: string | null;
+  name: string;
+  specialty: string | null;
+  color: string | null;
+};
+
+export type BookingClientRowDto = BookingCountsDto & {
+  contactId: string;
+  name: string;
+  phone: string | null;
+  lastBookingAt: string;
+};
+
+export type BookingsBlockDto = {
+  period: PeriodDto;
+  scope: BookingsScope;
+  global: BookingCountsDto;
+  byProfessional: BookingProfessionalRowDto[];
+  byClient: BookingClientRowDto[];
+  empty: boolean;
+};
+
 export type BotBlockDto = {
   period: PeriodDto;
   /** Conversaciones que empezaron en el periodo. */

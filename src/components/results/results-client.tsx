@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import type {
   AdsBlockDto,
+  BookingsBlockDto,
+  BookingsScope,
   BotBlockDto,
   HygieneBlockDto,
   SalesBlockDto,
 } from "@/lib/analytics";
 import { AdsSection } from "./ads-section";
+import { BookingsSection } from "./bookings-section";
 import { BotSection } from "./bot-section";
 import { HygieneSection } from "./hygiene-section";
 import { defaultRange, RangePicker, type Range } from "./range-picker";
@@ -77,6 +80,10 @@ export function ResultsClient({
   const [ads, setAds] = useState<Block<AdsBlockDto>>(inicial);
   const [bot, setBot] = useState<Block<BotBlockDto>>(inicial);
   const [hygiene, setHygiene] = useState<Block<HygieneBlockDto>>(inicial);
+  const [bookings, setBookings] = useState<Block<BookingsBlockDto>>(inicial);
+  const [bookingsScope, setBookingsScope] = useState<BookingsScope>("period");
+  const [bookingsSearch, setBookingsSearch] = useState("");
+  const [bookingsOnlyNoShow, setBookingsOnlyNoShow] = useState(false);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -86,6 +93,34 @@ export function ResultsClient({
     void cargar(`/api/analytics/bot?${q}`, setBot, ctl.signal);
     return () => ctl.abort();
   }, [range]);
+
+  useEffect(() => {
+    if (!agenda) return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        from: range.from,
+        to: range.to,
+        scope: bookingsScope,
+      });
+      if (bookingsSearch.trim()) params.set("q", bookingsSearch.trim());
+      if (bookingsOnlyNoShow) params.set("onlyNoShow", "1");
+      void cargar(`/api/analytics/bookings?${params.toString()}`, setBookings, ctl.signal);
+    }, bookingsSearch.trim() ? 250 : 0);
+    return () => {
+      clearTimeout(timer);
+      ctl.abort();
+    };
+  }, [agenda, range, bookingsScope, bookingsSearch, bookingsOnlyNoShow]);
+
+  const bookingsCsvParams = new URLSearchParams({
+    from: range.from,
+    to: range.to,
+    scope: bookingsScope,
+    format: "csv",
+  });
+  if (bookingsSearch.trim()) bookingsCsvParams.set("q", bookingsSearch.trim());
+  if (bookingsOnlyNoShow) bookingsCsvParams.set("onlyNoShow", "1");
 
   // La higiene describe el AHORA: no depende del rango elegido.
   useEffect(() => {
@@ -110,6 +145,18 @@ export function ResultsClient({
         <SalesSection {...sales} currency={currency} />
         <AdsSection {...ads} />
         <BotSection {...bot} agenda={agenda} />
+        {agenda && (
+          <BookingsSection
+            {...bookings}
+            scope={bookingsScope}
+            onScopeChange={setBookingsScope}
+            search={bookingsSearch}
+            onSearchChange={setBookingsSearch}
+            onlyNoShow={bookingsOnlyNoShow}
+            onOnlyNoShowChange={setBookingsOnlyNoShow}
+            csvHref={`/api/analytics/bookings?${bookingsCsvParams.toString()}`}
+          />
+        )}
         <HygieneSection {...hygiene} currency={currency} />
       </div>
     </div>
