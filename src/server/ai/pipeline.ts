@@ -28,9 +28,18 @@ import {
   quedanDebidos,
 } from "@/server/ai/orden-turno";
 import { agendaEnabled } from "@/server/agenda/flag";
-import { bookSlot, offerSlots } from "@/server/agenda/agent";
+import {
+  bookSlot,
+  cancelSlot,
+  offerSlots,
+  rescheduleSlot,
+} from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
 import { listProfessionals } from "@/server/agenda/professionals";
+import {
+  listActiveBookingsForContact,
+  type ActiveContactBooking,
+} from "@/server/agenda/queries";
 
 /**
  * Turno del agente (FR-021..FR-025).
@@ -273,8 +282,14 @@ export async function runAgentTurn(
    *
    * Reportado por @Diony7004 en #50, con el diagnóstico ya hecho.
    */
-  const ofertas = agenda ? await getOffers(organizationId, conversationId) : [];
+  const [ofertas, activeBookings] = agenda
+    ? await Promise.all([
+        getOffers(organizationId, conversationId),
+        listActiveBookingsForContact(organizationId, conversation.contactId),
+      ])
+    : [[], []];
   const mapaDeHuecos = mapaDeHuecosParaModelo(ofertas);
+  const citasActivasTexto = formatActiveBookingsForModel(activeBookings);
 
   const messages: ChatMessage[] = [
     {
@@ -293,6 +308,9 @@ export async function runAgentTurn(
         role: m.direction === "in" ? ("user" as const) : ("assistant" as const),
         content: m.text!,
       })),
+    ...(citasActivasTexto
+      ? [{ role: "system" as const, content: citasActivasTexto }]
+      : []),
     /**
      * Va AL FINAL, después del historial: es el estado de AHORA, y ponerlo
      * antes lo dejaría enterrado bajo la conversación en cuanto esta crezca.
@@ -319,7 +337,12 @@ export async function runAgentTurn(
 
   // 015 — Agenda. Un fallo del motor degrada el turno (el agente responde sin
   // agendar), nunca lo tumba: quedarse callado es peor que no agendar.
-  if (action.action === "offer_slots" || action.action === "book_slot") {
+  if (
+    action.action === "offer_slots" ||
+    action.action === "book_slot" ||
+    action.action === "reschedule_slot" ||
+    action.action === "cancel_booking"
+  ) {
     if (!agenda) {
       action = degradeAction(action);
     } else {
@@ -333,13 +356,28 @@ export async function runAgentTurn(
                 professionalId: action.professionalId,
                 specialty: action.specialty,
               })
-            : await bookSlot({
-                organizationId,
-                conversationId,
-                startUtc: action.startUtc,
-                confirmation: action.reply,
-                professionalId: action.professionalId,
-              });
+            : action.action === "book_slot"
+              ? await bookSlot({
+                  organizationId,
+                  conversationId,
+                  startUtc: action.startUtc,
+                  confirmation: action.reply,
+                  professionalId: action.professionalId,
+                })
+              : action.action === "reschedule_slot"
+                ? await rescheduleSlot({
+                    organizationId,
+                    conversationId,
+                    startUtc: action.startUtc,
+                    bookingId: action.bookingId,
+                    confirmation: action.reply,
+                  })
+                : await cancelSlot({
+                    organizationId,
+                    conversationId,
+                    bookingId: action.bookingId,
+                    confirmation: action.reply,
+                  });
         await deliverReply(conversation, turn.text);
         if (turn.ok) {
           publish(organizationId, {
@@ -555,4 +593,24 @@ async function appendLeadNote(
       updatedAt: new Date(),
     })
     .where(eq(schema.contact.id, contact.id));
+}
+
+function formatActiveBookingsForModel(
+  bookings: ActiveContactBooking[]
+): string | null {
+  if (bookings.length === 0) return null;
+  const lines = bookings.map((b) => {
+    const parts = [
+      `bookingId="${b.id}"`,
+      `${b.weekday} ${b.date} a las ${b.time}`,
+      b.professionalName ? `con ${b.professionalName}` : null,
+      b.procedureName ? `(${b.procedureName})` : null,
+      b.meetingLink ? `enlace=${b.meetingLink}` : null,
+    ].filter(Boolean);
+    return `- ${parts.join(" · ")}`;
+  });
+  return [
+    "CITAS ACTIVAS DEL CLIENTE (fuente real de su agenda actual; incluye citas manuales y de IA):",
+    ...lines,
+  ].join("\n");
 }

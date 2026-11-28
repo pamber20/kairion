@@ -379,6 +379,7 @@ export async function rescheduleForConversation(input: {
   organizationId: string;
   conversationId: string;
   startUtc: string;
+  bookingId?: string;
   now?: Date;
 }): Promise<BookingResult> {
   const db = getDb();
@@ -419,7 +420,9 @@ export async function rescheduleForConversation(input: {
           eq(schema.booking.contactId, conv.contactId),
           eq(schema.booking.kind, "session"),
           eq(schema.booking.status, "agendada"),
-          gte(schema.booking.scheduledAt, now)
+          input.bookingId
+            ? eq(schema.booking.id, input.bookingId)
+            : gte(schema.booking.scheduledAt, now)
         )
       )
     )
@@ -439,6 +442,68 @@ export async function rescheduleForConversation(input: {
   });
   await clearOffers(input.organizationId, input.conversationId).catch(() => {});
   return result;
+}
+
+/**
+ * 015 — Cancelación desde el agente de IA, validando pertenencia al contacto
+ * de la conversación (incluye citas creadas manualmente o por IA).
+ */
+export async function cancelForConversation(input: {
+  organizationId: string;
+  conversationId: string;
+  bookingId?: string;
+  now?: Date;
+}): Promise<{ bookingId: string; label: string }> {
+  const db = getDb();
+  const now = input.now ?? new Date();
+
+  const convRows = await db
+    .select({ contactId: schema.conversation.contactId })
+    .from(schema.conversation)
+    .where(
+      scoped(
+        schema.conversation.organizationId,
+        input.organizationId,
+        eq(schema.conversation.id, input.conversationId)
+      )
+    )
+    .limit(1);
+  const conv = convRows[0];
+  if (!conv) throw new BookingError("not_found", "Conversación no encontrada");
+
+  const rows = await db
+    .select()
+    .from(schema.booking)
+    .where(
+      scoped(
+        schema.booking.organizationId,
+        input.organizationId,
+        and(
+          eq(schema.booking.contactId, conv.contactId),
+          eq(schema.booking.kind, "session"),
+          eq(schema.booking.status, "agendada"),
+          input.bookingId
+            ? eq(schema.booking.id, input.bookingId)
+            : gte(schema.booking.scheduledAt, now)
+        )
+      )
+    )
+    .orderBy(asc(schema.booking.scheduledAt))
+    .limit(1);
+
+  const target = rows[0];
+  if (!target) {
+    throw new BookingError("not_found", "No hay una cita activa para cancelar");
+  }
+
+  const settings = await getSettings(input.organizationId);
+  await cancelBooking({
+    organizationId: input.organizationId,
+    bookingId: target.id,
+  });
+
+  const label = labelInTz(target.scheduledAt.toISOString(), settings.timezone);
+  return { bookingId: target.id, label };
 }
 
 /** Idempotente: cancelar una cita ya cancelada no falla ni cambia nada. */

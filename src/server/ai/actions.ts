@@ -48,6 +48,17 @@ const agendaActions = [
     reply: z.string().optional(),
     professionalId: z.string().optional(),
   }),
+  z.object({
+    action: z.literal("reschedule_slot"),
+    bookingId: z.string().optional(),
+    startUtc: z.string().min(1),
+    reply: z.string().optional(),
+  }),
+  z.object({
+    action: z.literal("cancel_booking"),
+    bookingId: z.string().optional(),
+    reply: z.string().optional(),
+  }),
 ] as const;
 
 export const AgentAction = z.discriminatedUnion("action", [
@@ -83,7 +94,9 @@ export function degradeAction(action: AgentActionType): AgentActionType {
   if (
     action.action === "move_stage" ||
     action.action === "offer_slots" ||
-    action.action === "book_slot"
+    action.action === "book_slot" ||
+    action.action === "reschedule_slot" ||
+    action.action === "cancel_booking"
   ) {
     return action.reply
       ? { action: "reply", text: action.reply }

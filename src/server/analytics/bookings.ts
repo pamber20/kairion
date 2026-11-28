@@ -50,7 +50,7 @@ function bookingFilter(
 
 const AGG_COLS = {
   total: sql<number>`count(*)::int`,
-  pending: sql<number>`count(*) filter (where ${schema.booking.status} = 'confirmada')::int`,
+  pending: sql<number>`count(*) filter (where ${schema.booking.status} = 'agendada')::int`,
   done: sql<number>`count(*) filter (where ${schema.booking.status} = 'realizada')::int`,
   noShow: sql<number>`count(*) filter (where ${schema.booking.status} = 'no_show')::int`,
   cancelled: sql<number>`count(*) filter (where ${schema.booking.status} = 'cancelada')::int`,

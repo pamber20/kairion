@@ -61,15 +61,19 @@ export function buildAgentSystemPrompt(input: {
 
   const agendaLines = input.agenda
     ? [
-        '- {"action":"offer_slots","reply":"...","professionalId":"...","specialty":"..."} — ofrecer horarios para agendar (reply es la frase de entrada; los horarios los pone el sistema). Opcionalmente filtra por professionalId o specialty.',
-        '- {"action":"book_slot","startUtc":"<uno de los horarios que el sistema ofreció, en ISO UTC>","reply":"...","professionalId":"..."} — agendar el horario que el cliente eligió.',
+        '- {"action":"offer_slots","reply":"...","professionalId":"...","specialty":"..."} — ofrecer horarios para agendar o reprogramar (reply es la frase de entrada; los horarios los pone el sistema). Opcionalmente filtra por professionalId o specialty.',
+        '- {"action":"book_slot","startUtc":"<uno de los horarios que el sistema ofreció, en ISO UTC>","reply":"...","professionalId":"..."} — agendar una cita nueva en el horario que el cliente eligió.',
+        '- {"action":"reschedule_slot","bookingId":"<opcional si solo tiene 1 cita activa>","startUtc":"<uno de los horarios ofrecidos, en ISO UTC>","reply":"..."} — reprogramar una cita existente del cliente al nuevo horario elegido.',
+        '- {"action":"cancel_booking","bookingId":"<opcional si solo tiene 1 cita activa>","reply":"..."} — cancelar una cita existente del cliente cuando lo solicite.',
       ]
     : [];
   const agendaRules = input.agenda
     ? [
         "- NUNCA escribas tú los horarios ni los inventes: usa offer_slots y el sistema pega los reales.",
-        "- book_slot solo acepta un horario que el sistema ofreció antes en ESTA conversación. Si el cliente pide otro, vuelve a ofrecer con offer_slots.",
-        "- Si el cliente quiere CANCELAR una cita → handoff: esa decisión no es tuya.",
+        "- book_slot y reschedule_slot solo aceptan un horario que el sistema ofreció antes en ESTA conversación. Si el cliente pide otro, vuelve a ofrecer con offer_slots.",
+        "- Si el cliente pregunta por su cita actual (fecha, hora, profesional o enlace), responde usando EXCLUSIVAMENTE el bloque CITAS ACTIVAS DEL CLIENTE si está presente; nunca inventes datos.",
+        "- Si el cliente quiere REPROGRAMAR una cita activa: primero ofrece nuevos horarios con offer_slots y, cuando elija uno, usa reschedule_slot.",
+        "- Si el cliente quiere CANCELAR una cita activa: confirma o ejecuta cancel_booking con su bookingId.",
       ]
     : [];
   return [

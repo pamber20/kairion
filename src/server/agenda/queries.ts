@@ -190,3 +190,67 @@ function toListItem(r: Row, timezone: string): BookingListItem {
     specialistName: r.booking.specialistName ?? null,
   };
 }
+
+export type ActiveContactBooking = {
+  id: string;
+  scheduledAtUtc: string;
+  date: string;
+  time: string;
+  weekday: string;
+  source: "manual" | "ai";
+  professionalName: string | null;
+  procedureName: string | null;
+  meetingLink: string | null;
+};
+
+/**
+ * Citas activas futuras de un contacto (incluye citas manuales y de IA)
+ * para que el agente pueda informarlas, reprogramarlas o cancelarlas.
+ */
+export async function listActiveBookingsForContact(
+  organizationId: string,
+  contactId: string,
+  now: Date = new Date()
+): Promise<ActiveContactBooking[]> {
+  const db = getDb();
+  const settings = await getSettings(organizationId);
+  const rows = await db
+    .select({
+      booking: schema.booking,
+      profName: schema.professional.name,
+    })
+    .from(schema.booking)
+    .leftJoin(
+      schema.professional,
+      eq(schema.booking.professionalId, schema.professional.id)
+    )
+    .where(
+      scoped(
+        schema.booking.organizationId,
+        organizationId,
+        eq(schema.booking.contactId, contactId),
+        eq(schema.booking.kind, "session"),
+        eq(schema.booking.status, "agendada"),
+        eq(schema.booking.isTest, false),
+        gte(schema.booking.scheduledAt, now)
+      )
+    )
+    .orderBy(asc(schema.booking.scheduledAt))
+    .limit(10);
+
+  return rows.map((r) => {
+    const scheduledAtUtc = r.booking.scheduledAt.toISOString();
+    const parts = partsInTz(scheduledAtUtc, settings.timezone);
+    return {
+      id: r.booking.id,
+      scheduledAtUtc,
+      date: parts.date,
+      time: parts.time,
+      weekday: parts.weekday,
+      source: r.booking.source,
+      professionalName: r.profName ?? r.booking.specialistName ?? null,
+      procedureName: r.booking.procedureName ?? null,
+      meetingLink: r.booking.meetingLink ?? null,
+    };
+  });
+}

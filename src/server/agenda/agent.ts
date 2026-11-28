@@ -2,7 +2,12 @@ import { computeAvailability } from "@/server/agenda/availability";
 import { getSettings } from "@/server/agenda/settings";
 import { spreadByDay } from "@/server/agenda/spread";
 import { replaceOffers } from "@/server/agenda/offers";
-import { BookingError, createSessionBooking } from "@/server/agenda/service";
+import {
+  BookingError,
+  cancelForConversation,
+  createSessionBooking,
+  rescheduleForConversation,
+} from "@/server/agenda/service";
 
 /**
  * 015 — Lo que el agente incluido puede hacer con la agenda.
@@ -134,6 +139,85 @@ export async function bookSlot(input: {
     return {
       ok: false,
       text: "No pude agendarlo en este momento. Lo reviso con el equipo y te confirmo.",
+    };
+  }
+}
+
+export async function rescheduleSlot(input: {
+  organizationId: string;
+  conversationId: string;
+  startUtc: string;
+  bookingId?: string;
+  confirmation?: string;
+}): Promise<AgendaTurn> {
+  try {
+    const result = await rescheduleForConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      startUtc: input.startUtc,
+      bookingId: input.bookingId,
+    });
+
+    const base =
+      input.confirmation?.trim() ||
+      `¡Listo! Reprogramé tu cita para ${result.label}.`;
+    if (result.meetingLink) {
+      return { ok: true, text: `${base}\nEnlace: ${result.meetingLink}` };
+    }
+    return { ok: true, text: base };
+  } catch (err) {
+    if (!(err instanceof BookingError)) throw err;
+    if (err.code === "not_found") {
+      return {
+        ok: false,
+        text: "No encontré una cita activa pendiente para reprogramar. ¿Quieres que veamos horarios para agendar una nueva?",
+      };
+    }
+    if (err.slots.length > 0) {
+      const lista = err.slots
+        .slice(0, SHOWN)
+        .map((s) => `• ${s.label}`)
+        .join("\n");
+      const disculpa =
+        err.code === "slot_taken"
+          ? "Ese horario se acaba de ocupar, ¡perdón!"
+          : "Déjame confirmarte los horarios que tengo disponibles para moverla:";
+      return { ok: false, text: `${disculpa}\n${lista}` };
+    }
+    return {
+      ok: false,
+      text: "No pude reprogramar tu cita en este momento. Lo reviso con el equipo y te confirmo.",
+    };
+  }
+}
+
+export async function cancelSlot(input: {
+  organizationId: string;
+  conversationId: string;
+  bookingId?: string;
+  confirmation?: string;
+}): Promise<AgendaTurn> {
+  try {
+    const result = await cancelForConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      bookingId: input.bookingId,
+    });
+    const text =
+      input.confirmation?.trim() ||
+      `Listo, he cancelado tu cita de ${result.label}. Si deseas agendar otro día, dime y con gusto revisamos.`;
+    return { ok: true, text };
+  } catch (err) {
+    if (!(err instanceof BookingError)) throw err;
+    if (err.code === "not_found") {
+      return {
+        ok: false,
+        text: "No encontré una cita activa pendiente para cancelar.",
+      };
+    }
+    return {
+      ok: false,
+      text: "No pude cancelar la cita en este momento. Lo reviso con el equipo y te confirmo.",
     };
   }
 }
