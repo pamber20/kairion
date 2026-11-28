@@ -32,6 +32,7 @@ import { BlockDialog } from "./block-dialog";
 import { BookingDrawer, type ActResult } from "./booking-drawer";
 import type { Booking } from "./booking-look";
 import { CalendarToolbar } from "./calendar-toolbar";
+import { ManualBookingDialog } from "./manual-booking-dialog";
 import { MonthGrid } from "./month-grid";
 import { TimeGrid } from "./time-grid";
 
@@ -105,6 +106,7 @@ export function BookingsClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Booking | null>(null);
   const [blockDraft, setBlockDraft] = useState<{ day: string; time: string } | null>(null);
+  const [bookingDraft, setBookingDraft] = useState<{ day: string; time: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const seq = useRef(0);
@@ -294,20 +296,29 @@ export function BookingsClient({
     setView("dia");
   }
 
-  /** Bloquear: en el hueco tocado o, desde la barra, en la próxima media hora. */
-  function openBlock(day?: string, time?: string) {
-    setSelectedId(null);
-    if (day && time) {
-      setBlockDraft({ day, time });
-      return;
-    }
+  function defaultSlot(day?: string, time?: string): { day: string; time: string } {
+    if (day && time) return { day, time };
     const base =
       today && range && today >= range.from && today <= range.to ? today : (range?.from ?? anchor);
     let start = workingBands(weeklyHours, base)[0]?.startMin ?? 9 * 60;
     if (base === today) {
       start = Math.min(23 * 60 + 30, Math.max(start, Math.ceil((nowMinutes + 1) / 30) * 30));
     }
-    setBlockDraft({ day: base, time: hhmm(start) });
+    return { day: base, time: hhmm(start) };
+  }
+
+  /** Bloquear: en el hueco tocado o, desde la barra, en la próxima media hora. */
+  function openBlock(day?: string, time?: string) {
+    setSelectedId(null);
+    setBookingDraft(null);
+    setBlockDraft(defaultSlot(day, time));
+  }
+
+  /** Agendar cita manual: en el hueco tocado o, desde la barra, en la próxima media hora. */
+  function openNewBooking(day?: string, time?: string) {
+    setSelectedId(null);
+    setBlockDraft(null);
+    setBookingDraft(defaultSlot(day, time));
   }
 
   async function act(b: Booking, body: Record<string, unknown>): Promise<ActResult> {
@@ -355,6 +366,7 @@ export function BookingsClient({
         onJump={setAnchor}
         onView={changeView}
         onListRange={changeListRange}
+        onNewBooking={() => openNewBooking()}
         onBlock={() => openBlock()}
       />
 
@@ -414,7 +426,7 @@ export function BookingsClient({
                 selectedId={selectedId}
                 ready={ready}
                 onSelect={select}
-                onEmptySlot={(day, time) => openBlock(day, time)}
+                onEmptySlot={(day, time) => openNewBooking(day, time)}
                 onOpenDay={openDay}
               />
             ) : view === "mes" ? (
@@ -454,10 +466,30 @@ export function BookingsClient({
         )}
       </div>
 
+      {bookingDraft && (
+        <ManualBookingDialog
+          initialDay={bookingDraft.day}
+          initialTime={bookingDraft.time}
+          initialProfessionalId={selectedProfId}
+          professionals={professionals}
+          timezone={timezone}
+          onCancel={() => setBookingDraft(null)}
+          onSwitchToBlock={(day, time) => openBlock(day, time)}
+          onCreated={(day, bookingId) => {
+            setBookingDraft(null);
+            reveal(day);
+            setSelectedId(bookingId);
+            void reload();
+          }}
+        />
+      )}
+
       {blockDraft && (
         <BlockDialog
           initialDay={blockDraft.day}
           initialTime={blockDraft.time}
+          initialProfessionalId={selectedProfId}
+          professionals={professionals}
           timezone={timezone}
           onCancel={() => setBlockDraft(null)}
           onCreated={(day) => {

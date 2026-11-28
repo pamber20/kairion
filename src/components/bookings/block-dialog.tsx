@@ -24,18 +24,25 @@ function durationLabel(min: number): string {
 export function BlockDialog({
   initialDay,
   initialTime,
+  initialProfessionalId,
+  professionals = [],
   timezone,
   onCancel,
   onCreated,
 }: {
   initialDay: string;
   initialTime: string;
+  initialProfessionalId?: string | null;
+  professionals?: { id: string; name: string }[];
   timezone: string;
   onCancel: () => void;
   onCreated: (day: string) => void;
 }) {
   const [day, setDay] = useState(initialDay);
   const [time, setTime] = useState(initialTime);
+  const [professionalId, setProfessionalId] = useState<string>(
+    initialProfessionalId ?? ""
+  );
   const [minutes, setMinutes] = useState(60);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -67,6 +74,7 @@ export function BlockDialog({
         kind: "block",
         startUtc,
         durationMinutes: minutes,
+        professionalId: professionalId || null,
         notes: notes.trim() || null,
       }),
     }).catch(() => null);
@@ -118,6 +126,25 @@ export function BlockDialog({
             />
           </div>
         </div>
+
+        {professionals.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="bloqueo-prof">Profesional</Label>
+            <select
+              id="bloqueo-prof"
+              value={professionalId}
+              onChange={(e) => setProfessionalId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:border-brand focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-brand-soft"
+            >
+              <option value="">Toda la agenda (general)</option>
+              {professionals.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="bloqueo-duracion">Duración</Label>
